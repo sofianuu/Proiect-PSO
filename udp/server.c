@@ -5,7 +5,8 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
-//test mileanos
+
+
 #define MAXLINE 1024
 #define DNS_PORT 8080
 #define DNS_RESPONSE 0x8180
