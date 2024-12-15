@@ -1,0 +1,24 @@
+; Zone file for facebook.com
+$TTL 3600
+@    IN    SOA   ns1.facebook.com. admin.facebook.com. (
+                  2024120601 ; Serial
+                  3600       ; Refresh
+                  1800       ; Retry
+                  1209600    ; Expire
+                  3600       ; Minimum TTL
+)
+
+@    IN    NS    ns1.facebook.com.
+@    IN    NS    ns2.facebook.com.
+
+@    IN    A     199.172.18.128
+@    IN    AAAA  10ed:6f39:9003:2e46:b8ef:5bb0:da87:a4fa
+www  IN    A     69.45.111.128
+
+mail IN    CNAME www.facebook.com.
+
+@    IN    MX    10 mail.facebook.com.
+@    IN    MX    20 backupmail.facebook.com.
+
+@    IN    TXT   "9zkEK83pCEGqiNE7AgjLQUpy9FBllLFSXclio7xnGaylIwh3gQ"
+

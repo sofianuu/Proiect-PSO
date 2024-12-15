@@ -1,0 +1,24 @@
+; Zone file for olx.com
+$TTL 3600
+@    IN    SOA   ns1.olx.com. admin.olx.com. (
+                  2024120601 ; Serial
+                  3600       ; Refresh
+                  1800       ; Retry
+                  1209600    ; Expire
+                  3600       ; Minimum TTL
+)
+
+@    IN    NS    ns1.olx.com.
+@    IN    NS    ns2.olx.com.
+
+@    IN    A     187.165.131.199
+@    IN    AAAA  9b50:1477:4d37:3f54:26fe:bb4c:da77:f9e5
+www  IN    A     188.8.162.206
+
+mail IN    CNAME www.olx.com.
+
+@    IN    MX    10 mail.olx.com.
+@    IN    MX    20 backupmail.olx.com.
+
+@    IN    TXT   "q0I1EHoG7qiVgpHaLIF05JYCpiWowEXqQnUOEojQwhp5SH7NHs"
+

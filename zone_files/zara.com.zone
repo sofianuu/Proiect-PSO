@@ -1,0 +1,24 @@
+; Zone file for zara.com
+$TTL 3600
+@    IN    SOA   ns1.zara.com. admin.zara.com. (
+                  2024120601 ; Serial
+                  3600       ; Refresh
+                  1800       ; Retry
+                  1209600    ; Expire
+                  3600       ; Minimum TTL
+)
+
+@    IN    NS    ns1.zara.com.
+@    IN    NS    ns2.zara.com.
+
+@    IN    A     213.229.59.221
+@    IN    AAAA  ce16:80d5:b21:3147:582d:4157:4946:df76
+www  IN    A     65.119.217.16
+
+mail IN    CNAME www.zara.com.
+
+@    IN    MX    10 mail.zara.com.
+@    IN    MX    20 backupmail.zara.com.
+
+@    IN    TXT   "HUOZcRsqgHYY7QHTRVnxm7DbeCiLPmru2JfVvWDHGJRxKB73pJ"
+

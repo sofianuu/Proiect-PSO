@@ -1,0 +1,24 @@
+; Zone file for hm.com
+$TTL 3600
+@    IN    SOA   ns1.hm.com. admin.hm.com. (
+                  2024120601 ; Serial
+                  3600       ; Refresh
+                  1800       ; Retry
+                  1209600    ; Expire
+                  3600       ; Minimum TTL
+)
+
+@    IN    NS    ns1.hm.com.
+@    IN    NS    ns2.hm.com.
+
+@    IN    A     228.150.188.170
+@    IN    AAAA  c1b8:de44:7d6a:1b3:327d:e24c:7160:4fd0
+www  IN    A     35.240.168.190
+
+mail IN    CNAME www.hm.com.
+
+@    IN    MX    10 mail.hm.com.
+@    IN    MX    20 backupmail.hm.com.
+
+@    IN    TXT   "IDeqLczzqKUe2BbCuriclQpVuZydLULMd2dScHcq917OC6JWLs"
+

@@ -1,0 +1,24 @@
+; Zone file for elefant.ro
+$TTL 3600
+@    IN    SOA   ns1.elefant.ro. admin.elefant.ro. (
+                  2024120601 ; Serial
+                  3600       ; Refresh
+                  1800       ; Retry
+                  1209600    ; Expire
+                  3600       ; Minimum TTL
+)
+
+@    IN    NS    ns1.elefant.ro.
+@    IN    NS    ns2.elefant.ro.
+
+@    IN    A     251.144.147.137
+@    IN    AAAA  689b:3500:f829:fc0c:45e2:f428:87d4:e228
+www  IN    A     5.158.47.84
+
+mail IN    CNAME www.elefant.ro.
+
+@    IN    MX    10 mail.elefant.ro.
+@    IN    MX    20 backupmail.elefant.ro.
+
+@    IN    TXT   "icmsPJQCR3inAmBX8iykY2h6qRzDVWWDkMrtJlRwXHBrly6DEr"
+

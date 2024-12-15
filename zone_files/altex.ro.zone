@@ -1,0 +1,24 @@
+; Zone file for altex.ro
+$TTL 3600
+@    IN    SOA   ns1.altex.ro. admin.altex.ro. (
+                  2024120601 ; Serial
+                  3600       ; Refresh
+                  1800       ; Retry
+                  1209600    ; Expire
+                  3600       ; Minimum TTL
+)
+
+@    IN    NS    ns1.altex.ro.
+@    IN    NS    ns2.altex.ro.
+
+@    IN    A     183.94.232.93
+@    IN    AAAA  a654:b558:7ae6:f0b6:8a9a:7893:416e:ef5b
+www  IN    A     126.255.30.228
+
+mail IN    CNAME www.altex.ro.
+
+@    IN    MX    10 mail.altex.ro.
+@    IN    MX    20 backupmail.altex.ro.
+
+@    IN    TXT   "9zh3BPSXdeTD2PdvdENDOWGU9LAtw6g2TOeY5V2BmXZZidUnwJ"
+

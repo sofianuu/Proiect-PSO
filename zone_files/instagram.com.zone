@@ -1,0 +1,24 @@
+; Zone file for instagram.com
+$TTL 3600
+@    IN    SOA   ns1.instagram.com. admin.instagram.com. (
+                  2024120601 ; Serial
+                  3600       ; Refresh
+                  1800       ; Retry
+                  1209600    ; Expire
+                  3600       ; Minimum TTL
+)
+
+@    IN    NS    ns1.instagram.com.
+@    IN    NS    ns2.instagram.com.
+
+@    IN    A     192.168.25.129
+@    IN    AAAA  4eb4:9ede:2d33:3288:be1d:1312:2ac9:9ad9
+www  IN    A     3.17.176.227
+
+mail IN    CNAME www.instagram.com.
+
+@    IN    MX    10 mail.instagram.com.
+@    IN    MX    20 backupmail.instagram.com.
+
+@    IN    TXT   "A6svutzQXMeE4L4FEnuaYBggKtRfNTaKiSMTxRBC7s5VmlC1yH"
+
