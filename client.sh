@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-CMD="dig @127.0.0.1 -p 8080 altex.com"
+CMD="dig @127.0.0.1 -p 8080 altex.ro"
 
 NUM_RUNS=10
 

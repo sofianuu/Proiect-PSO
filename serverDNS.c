@@ -12,11 +12,17 @@
 #include <pthread.h>
 #include <netinet/in.h>
 #include <resolv.h>
+#include <netdb.h>
+#include <unistd.h>
+#include <time.h>
+#include <stdarg.h>
+#include <sys/stat.h>
 
 #include "dns.h" //header dns 
 
 #define BUFFER_SIZE 1500
-#define MIN(x, y) ((x) <= (y) ? (x) : (y))
+#define MAX_PACKET_SIZE 65535
+
 
 #define THREAD_NUM 5
 
@@ -46,6 +52,55 @@ int queueCount=0;
 pthread_mutex_t mutexQueue;
 pthread_cond_t condQueue;
 
+FILE *log_file = NULL;
+
+void init_logging(const char *filename) {
+    log_file = fopen(filename, "a");
+    if (!log_file) {
+        perror("Eroare la deschiderea fișierului de log");
+    }
+}
+
+
+void log_message(const char *level, const char *format, ...) {
+    if (!log_file) {
+        fprintf(stderr, "Fișierul de log nu este deschis!\n");
+        return;
+    }
+
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    char time_buffer[20];
+    strftime(time_buffer, sizeof(time_buffer), "%Y-%m-%d %H:%M:%S", t);
+
+    fprintf(log_file, "[%s] %s: ", time_buffer, level);
+
+    va_list args;
+    va_start(args, format);
+    vfprintf(log_file, format, args);
+    va_end(args);
+
+    fprintf(log_file, "\n");
+    fflush(log_file); // Scrie imediat în fișier
+}
+
+void close_logging() {
+    if (log_file) {
+        fclose(log_file);
+        log_file = NULL;
+    }
+}
+
+void rotate_logs(const char *filename) {
+    struct stat st;
+    if (stat(filename, &st) == 0 && st.st_size > 1024 * 1024) { // 1MB
+        char backup_name[256];
+        snprintf(backup_name, sizeof(backup_name), "%s.bak", filename);
+        rename(filename, backup_name);
+    }
+}
+
+
 void submit(Received recv)
 {
     pthread_mutex_lock(&mutexQueue);
@@ -55,13 +110,13 @@ void submit(Received recv)
     pthread_cond_signal(&condQueue);
 }
 
-void query_dns(const char *domain, const char *dns_server) {
+char* query_dns_type_A(const char *domain, const char *dns_server) {
     unsigned char query_buf[NS_PACKETSZ];
     ns_msg handle;
     ns_rr rr;
     int query_len, i;
+    static char ip_str[INET_ADDRSTRLEN]; // pentru a salva adresa IP găsită
 
-   
     struct sockaddr_in dest;
     memset(&dest, 0, sizeof(dest));
     dest.sin_family = AF_INET;
@@ -72,115 +127,228 @@ void query_dns(const char *domain, const char *dns_server) {
     query_len = res_query(domain, ns_c_in, ns_t_a, query_buf, sizeof(query_buf));
     if (query_len < 0) {
         perror("res_query failed");
-        return;
+        return NULL;
     }
 
-    // Procesam raspunsul
+    // Procesăm răspunsul
     if (ns_initparse(query_buf, query_len, &handle) < 0) {
         perror("ns_initparse failed");
-        return;
+        return NULL;
     }
 
     for (i = 0; i < ns_msg_count(handle, ns_s_an); i++) {
         if (ns_parserr(&handle, ns_s_an, i, &rr) < 0) {
             perror("ns_parserr failed");
-            return;
+            return NULL;
         }
 
-        // Verifica tipul de înregistrare (A, CNAME, etc.)
+        // Verifică tipul de înregistrare (A, CNAME, etc.)
         if (ns_rr_type(rr) == ns_t_a) {
             struct in_addr ip_addr;
             memcpy(&ip_addr, ns_rr_rdata(rr), sizeof(ip_addr));
-            printf("Domeniul %s are IP-ul %s\n", domain, inet_ntoa(ip_addr));
+
+            // Convertește adresa IP în formatul șirului de caractere
+            if (inet_ntop(AF_INET, &ip_addr, ip_str, sizeof(ip_str)) != NULL) {
+                return ip_str; // Returnează prima adresă găsită
+            }
         }
+    }
+
+    // Dacă nu s-a găsit nici o adresă
+    return NULL;
+}
+
+void parse_ipv4_address(char *adresa, uint8_t addr[4]) 
+{
+    int octet;
+    const char *ptr = adresa; // Pointer la începutul string-ului
+    char temp[4]; // Buffer temporar pentru fiecare octet
+    int index = 0;
+
+    while (*ptr != '\0' && index < 4) {
+        int i = 0;
+        // Extrage caracterele până la '.'
+        while (*ptr != '.' && *ptr != '\0') {
+            temp[i++] = *ptr;
+            ptr++;
+        }
+        temp[i] = '\0'; // Termină bufferul temporar cu NULL
+
+        // Convertim partea curentă în număr și o punem în addr
+        octet = atoi(temp);
+        if (octet < 0 || octet > 255) {
+            printf("Adresa IP invalidă!\n");
+            return;
+        }
+        addr[index++] = (uint8_t)octet;
+
+        // Dacă am ajuns la '.', trecem peste el
+        if (*ptr == '.') {
+            ptr++;
+        }
+    }
+
+    // Verificăm dacă am găsit toți cei 4 octeți
+    if (index != 4) {
+        printf("Adresa IP incompletă!\n");
+    }
+}
+
+void parse_ipv6_address(const char *ipv6_str, uint8_t addr[16])
+{
+    // Inițializăm array-ul cu zero
+    memset(addr, 0, 16);
+    
+    const char *ptr = ipv6_str;   // Pointer pentru a parcurge string-ul
+    char block[5] = {0};          // Fiecare grup hexa poate avea max 4 cifre + terminator '\0'
+    int block_index = 0;          // Index pentru grupuri
+    int addr_index = 0;           // Index în array-ul addr
+
+    while (*ptr && addr_index < 16) {
+        // Resetăm blocul
+        memset(block, 0, 5);
+
+        // Construim un grup de maxim 4 caractere hexadecimale
+        int i = 0;
+        while (*ptr && *ptr != ':' && i < 4) {
+            block[i++] = *ptr;
+            ptr++;
+        }
+
+        // Convertim grupul într-un uint16_t
+        uint16_t segment = (uint16_t)strtol(block, NULL, 16);
+
+        // Descompunem segmentul în 2 octeți
+        addr[addr_index++] = (segment >> 8) & 0xFF;  // Octetul superior
+        addr[addr_index++] = segment & 0xFF;         // Octetul inferior
+
+        // Dacă am ajuns la un separator ':', trecem la următorul grup
+        if (*ptr == ':') {
+            ptr++;
+        }
+    }
+
+    if (addr_index != 16) {
+        printf("Adresa IP incompletă!\n");
     }
 }
 
 bool get_A_Record(uint8_t addr[4], const char domain_name[])
 {
-  if (strcmp("foo.bar.com", domain_name) == 0) {
-    addr[0] = 192;
-    addr[1] = 168;
-    addr[2] = 1;
-    addr[3] = 1;
-    return true;
-  } else {
-    return false;
-  }
-}
-
-bool get_AAAA_Record(uint8_t addr[16], const char domain_name[])
-{
-  if (strcmp("foo.bar.com", domain_name) == 0) {
-    addr[0] = 0xfe;
-    addr[1] = 0x80;
-    addr[2] = 0x00;
-    addr[3] = 0x00;
-    addr[4] = 0x00;
-    addr[5] = 0x00;
-    addr[6] = 0x00;
-    addr[7] = 0x00;
-    addr[8] = 0x00;
-    addr[9] = 0x00;
-    addr[10] = 0x00;
-    addr[11] = 0x00;
-    addr[12] = 0x00;
-    addr[13] = 0x00;
-    addr[14] = 0x00;
-    addr[15] = 0x01;
-    return true;
-  }
-  
-  return false;
-  
-}
-
-bool get_TXT_Record(char **addr, const char domain_name[])
-{
-  if (strcmp("foo.bar.com", domain_name) == 0) {
-    *addr = "abcdefg";
-    return true;
-  } 
-    return false;
-  
-}
-
-
-char* getDNSRecordFromZone(const char *domain_name, const char *record_type)
-{
     char zone_file[30] ="zone_files/";
     strcat(zone_file,domain_name);
     strcat(zone_file,".zone");
-    
 
     static char record_value[INET_ADDRSTRLEN]; 
     char command[512];
 
-    snprintf(command, sizeof(command),
-             "grep -w \"%s   IN   %s\" %s | rev | cut -f1 -d\" \" | rev",
-             domain_name, record_type, zone_file);
+    snprintf(command,sizeof(command),"grep -w \"@    IN    A\" %s | rev | cut -f1 -d' ' | rev ",zone_file);
 
     FILE *fp = popen(command, "r");
     if (!fp) {
         perror("Nu s-a putut executa comanda");
-        return NULL;
+        return false;
     }
 
     if (fgets(record_value, sizeof(record_value), fp)) 
     {
         record_value[strcspn(record_value, "\n")] = '\0';
-        printf("valoare: %s\n", record_value);
         pclose(fp);
-        return record_value;
+
+        parse_ipv4_address(record_value,addr);
+        return true;
     }
     else
     {
       const char *dns_server = "8.8.8.8";  // google
-      query_dns(domain_name, dns_server);
+      char* ip=query_dns_type_A(domain_name, dns_server);
+      
+      if(ip == NULL)
+        return false;
+      else
+        {
+          parse_ipv4_address(ip,addr);
+          return true;
+        }
     }
 
     pclose(fp);
-    return NULL;
+    return false;
+}
+
+bool get_AAAA_Record(uint8_t addr[16], const char domain_name[])
+{
+  char zone_file[30] ="zone_files/";
+    strcat(zone_file,domain_name);
+    strcat(zone_file,".zone");
+
+    static char record_value[INET_ADDRSTRLEN]; 
+    char command[512];
+
+    snprintf(command,sizeof(command),"grep -w \"@    IN    AAAA\" %s | rev | cut -f1 -d' ' | rev",zone_file);
+
+    FILE *fp = popen(command, "r");
+    if (!fp) {
+        perror("Nu s-a putut executa comanda");
+        return false;
+    }
+
+    if (fgets(record_value, sizeof(record_value), fp)) 
+    {
+        record_value[strcspn(record_value, "\n")] = '\0';
+        pclose(fp);
+
+        parse_ipv6_address(record_value,addr);
+        return true;
+    }
+    else
+    {
+      const char *dns_server = "8.8.8.8";  // google
+      //query_dns(domain_name, dns_server, ns_t_aaaa);
+    }
+
+    pclose(fp);
+    return false;
+}
+
+bool get_TXT_Record(char **addr, const char domain_name[])
+{
+  char zone_file[30] ="zone_files/";
+    strcat(zone_file,domain_name);
+    strcat(zone_file,".zone");
+
+    static char record_value[255]; 
+    char command[512];
+
+    snprintf(command,sizeof(command),"grep -w \"@    IN    TXT\" %s | rev | cut -f1 -d' ' | cut -f2 -d'\"' | rev",zone_file);
+
+    FILE *fp = popen(command, "r");
+    if (!fp) {
+        perror("Nu s-a putut executa comanda");
+        return false;
+    }
+
+    if (fgets(record_value, sizeof(record_value), fp)) 
+    {
+        record_value[strcspn(record_value, "\n")] = '\0';
+        pclose(fp);
+
+        *addr = (char *)malloc(strlen(record_value) + 1);  // +1 pentru terminatorul de șir '\0'
+        if (*addr != NULL)
+        {
+          strcpy(*addr, record_value);
+          //printf("%s",record_value);
+          return true;
+        }
+    }
+    else
+    {
+      const char *dns_server = "8.8.8.8";  // google
+      //query_dns(domain_name, dns_server,ns_t_txt);
+    }
+
+    pclose(fp);
+    return false;
 }
 
 
@@ -210,8 +378,9 @@ void print_resource_record(struct Record *rr)
       case A_Resource_RecordType:
         printf("Address Resource Record { address ");
 
-        for (i = 0; i < 4; i += 1)
+        for (i = 0; i < 4; i += 1){
           printf("%s%u", (i ? "." : ""), rd->a_record.addr[i]);
+        }
 
         printf(" }");
         break;
@@ -455,18 +624,14 @@ void resolve_query(struct dns_Message *msg)
 
     printf("Query for '%s'\n", q->qname);
 
-    // We only can only answer two question types so far
-    // and the answer (resource records) will be all put
-    // into the answers list.
-    // This behavior is probably non-standard!
     switch (q->qtype) {
       case A_Resource_RecordType:
         rr->data_len = 4;
-        if (!get_A_Record(rr->rd_data.a_record.addr, q->qname)) {
+        if(!get_A_Record(rr->rd_data.a_record.addr, q->qname)){
           free(rr->name);
           free(rr);
           goto next;
-        }
+          }
         break;
       case AAAA_Resource_RecordType:
         rr->data_len = 16;
@@ -632,8 +797,9 @@ void handle_connection(Received * recv)
     print_message(&msg);
   
     resolve_query(&msg);
-
+  
     print_message(&msg);
+
 
     uint8_t *p = recv->buffer;
     if (!encode_msg(&msg, &p)) 
@@ -675,6 +841,10 @@ void * thread_function(void *args)
 
 int main()
 {
+  init_logging("aplicatie.log");
+
+  log_message("INFO", "Aplicația a început");
+
   pthread_t thread_pool[THREAD_NUM];
   pthread_mutex_init(&mutexQueue,NULL);
   pthread_cond_init(&condQueue,NULL);
@@ -732,5 +902,8 @@ int main()
   
   pthread_mutex_destroy(&mutexQueue);
   pthread_cond_destroy(&condQueue);
+
+  close_logging();
+
   return 0;
 }

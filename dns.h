@@ -51,16 +51,13 @@ typedef struct Flags
     uint16_t opcode; /* 0=standard query, 1=inverse query, 2=server status server, 3=status reserved */
     uint16_t aa; /* authority answer 1=authoritative, 0=non-authoritative */
     uint16_t tc; /* truncation */
-    uint16_t rd; /* recursion desired 1= server needs to answer the query recursively*/
+    uint16_t rd; /* recursion desired 1= server needs to answer the query recursively */
     uint16_t ra; /* recursion available */
     uint16_t zero; 
-    uint16_t rCode; /* response code 0= no error, 
-                    1=problem,
-                    2=server failure,
-                    3=name error,
-                    4=request type not suppported by the server,
-                    5=nonexecution of queries*/
-};
+    uint16_t rCode; /* response code 0= no error, 1=problem, 2=server failure, 3=name error,
+                      4=request type not supported by the server,
+                      5=nonexecution of queries */
+}Flags;
 
 
 
@@ -72,7 +69,7 @@ typedef struct Header
     uint16_t ancount;/* Answer Record Count */
     uint16_t nscount;/* Authority Record Count */
     uint16_t arcount;/* Additional Record Count */
-};
+}Header;
 
 typedef struct Question
 {
@@ -80,7 +77,7 @@ typedef struct Question
     uint16_t qtype;  
     uint16_t qclass;
     struct Question *next;
-};
+}Question;
 
 /* Data part of a Resource Record */
 union ResourceData {
@@ -105,7 +102,7 @@ typedef struct Record // answer, authority, additional
     uint16_t data_len; // Lungimea câmpului de date
     union ResourceData rd_data;   // Datele efective (ex. adresa IP)
     struct Record * next;
-};
+}Record;
 
 typedef struct dns_Message
 {
@@ -114,6 +111,6 @@ typedef struct dns_Message
     struct Record * answers;
     struct Record* authority_ans;
     struct Record* additional_ans;
-};
+}dns_Message;
 
 

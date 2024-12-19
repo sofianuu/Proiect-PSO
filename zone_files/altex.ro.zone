@@ -22,3 +22,7 @@ mail IN    CNAME www.altex.ro.
 
 @    IN    TXT   "9zh3BPSXdeTD2PdvdENDOWGU9LAtw6g2TOeY5V2BmXZZidUnwJ"
 
+;grep -w "@    IN    A" altex.ro.zone | rev | cut -f1 -d" " | rev   --> pentru domeniu cerere de tip A
+;grep -w "@    IN    AAAA" altex.ro.zone | rev | cut -f1 -d" " | rev     --> pentru domeniu cerere de tip AAAA
+;grep -w "@    IN    TXT" altex.ro.zone | rev | cut -f1 -d" " | cut -f2 -d"\"" | rev        --> pentru domeniu cerere de tip TXT
+;grep -w "www  IN    A" altex.ro.zone | rev | cut -f1 -d" " | rev     --> pentru un subdomeniu cerere tip A
