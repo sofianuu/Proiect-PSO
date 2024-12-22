@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "resolv.h": "c",
+        "typeinfo": "c"
+    }
+}

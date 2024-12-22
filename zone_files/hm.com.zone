@@ -5,7 +5,7 @@ $TTL 3600
                   3600       ; Refresh
                   1800       ; Retry
                   1209600    ; Expire
-                  3600       ; Minimum TTL
+                  300       ; Minimum TTL
 )
 
 @    IN    NS    ns1.hm.com.

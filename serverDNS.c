@@ -17,11 +17,14 @@
 #include <time.h>
 #include <stdarg.h>
 #include <sys/stat.h>
+#include <ctype.h>
+#include <arpa/nameser.h>
 
 #include "dns.h" //header dns 
 
 #define BUFFER_SIZE 1500
 #define MAX_PACKET_SIZE 65535
+#define MAX_DNS_BUFFER 65536
 
 
 #define THREAD_NUM 5
@@ -36,6 +39,17 @@ typedef struct Received
     struct sockaddr_in client_addr;
     socklen_t addr_len;
 }Received;
+
+typedef struct DNSCacheEntry {
+    char* domain_name;
+    char* record_value;
+    char type_value[5];
+    time_t timestamp;
+    int ttl;
+    struct DNSCacheEntry *next;
+} DNSCacheEntry;
+
+DNSCacheEntry *dns_cache = NULL;
 
 static const uint32_t QR_MASK = 0x8000;
 static const uint32_t OPCODE_MASK = 0x7800;
@@ -61,7 +75,6 @@ void init_logging(const char *filename) {
     }
 }
 
-
 void log_message(const char *level, const char *format, ...) {
     if (!log_file) {
         fprintf(stderr, "Fișierul de log nu este deschis!\n");
@@ -81,7 +94,7 @@ void log_message(const char *level, const char *format, ...) {
     va_end(args);
 
     fprintf(log_file, "\n");
-    fflush(log_file); // Scrie imediat în fișier
+    fflush(log_file);
 }
 
 void close_logging() {
@@ -93,13 +106,122 @@ void close_logging() {
 
 void rotate_logs(const char *filename) {
     struct stat st;
-    if (stat(filename, &st) == 0 && st.st_size > 1024 * 1024) { // 1MB
+    if (stat(filename, &st) == 0 && st.st_size > 1024 * 1024) {
         char backup_name[256];
         snprintf(backup_name, sizeof(backup_name), "%s.bak", filename);
         rename(filename, backup_name);
     }
 }
 
+void add_to_cache(const char *domain, const char *value, const char* type) {
+    DNSCacheEntry *new_entry = (DNSCacheEntry *)malloc(sizeof(DNSCacheEntry));
+    if (!new_entry) {
+        perror("Eroare la alocarea memoriei pentru cache");
+        return;
+    }
+
+    new_entry->domain_name = (char *)malloc(strlen(domain) + 1);
+    new_entry->record_value = (char *)malloc(strlen(value) + 1);
+    
+    if (!new_entry->domain_name || !new_entry->record_value) {
+        perror("Eroare la alocarea memoriei pentru numele domeniului sau valoarea inregistrarii");
+        free(new_entry);
+        return;
+    }
+
+    strcpy(new_entry->domain_name, domain);
+    strcpy(new_entry->record_value, value);
+    strcpy(new_entry->type_value, type);
+    new_entry->timestamp = time(NULL);
+    new_entry->ttl = 300;
+    new_entry->next = dns_cache;
+    dns_cache = new_entry;
+}
+
+void print_cache() 
+{
+    DNSCacheEntry *current = dns_cache;
+
+    FILE *file = fopen("cache_file", "w");
+    if (!file) 
+    {
+        perror("Eroare la deschiderea fișierului cache_file");
+        return;
+    }
+
+    fprintf(file, "Cache Entries:\n");
+    while (current) 
+    {
+        fprintf(file, "Domain: %s, Value: %s, Type: %s\n", 
+                current->domain_name, 
+                current->record_value, 
+                current->type_value);
+        current = current->next;
+    }
+
+    fclose(file);
+}
+
+void clean_cache() 
+{
+    DNSCacheEntry *current = dns_cache, *prev = NULL;
+    int cache_modified = 0;
+
+    while (current) 
+    {
+        if ((time(NULL) - current->timestamp) >= current->ttl) 
+        {
+            log_message("INFO", "Inregistrarea %s - %s a expirat si va fi stearsa din cache!", current->domain_name, current->type_value);
+            cache_modified = 1;
+
+            if (prev) 
+            {
+                prev->next = current->next;
+            } 
+            else 
+            {
+                dns_cache = current->next;
+            }
+
+            free(current->domain_name);
+            free(current->record_value);
+            free(current);
+
+            current = (prev) ? prev->next : dns_cache;
+        } 
+        else 
+        {
+            prev = current;
+            current = current->next;
+        }
+    }
+
+    if (cache_modified) 
+    {
+        print_cache();
+    }
+}
+
+char* search_cache(const char *domain, const char *type)
+{
+    DNSCacheEntry *current = dns_cache;
+    while (current)
+    {
+        if (strcmp(current->domain_name, domain) == 0 && strcmp(current->type_value,type) == 0)
+        {
+            if ((time(NULL) - current->timestamp) < current->ttl)
+            {
+                return current->record_value;
+            } else
+            {
+                clean_cache();
+                return NULL;
+            }
+        }
+        current = current->next;
+    }
+    return NULL;
+}
 
 void submit(Received recv)
 {
@@ -115,7 +237,7 @@ char* query_dns_type_A(const char *domain, const char *dns_server) {
     ns_msg handle;
     ns_rr rr;
     int query_len, i;
-    static char ip_str[INET_ADDRSTRLEN]; // pentru a salva adresa IP găsită
+    static char ip_str[INET_ADDRSTRLEN];
 
     struct sockaddr_in dest;
     memset(&dest, 0, sizeof(dest));
@@ -123,14 +245,12 @@ char* query_dns_type_A(const char *domain, const char *dns_server) {
     dest.sin_port = htons(53);
     inet_pton(AF_INET, dns_server, &dest.sin_addr);
 
-    // Folosim resolv pentru a trimite interogarea DNS
     query_len = res_query(domain, ns_c_in, ns_t_a, query_buf, sizeof(query_buf));
     if (query_len < 0) {
         perror("res_query failed");
         return NULL;
     }
 
-    // Procesăm răspunsul
     if (ns_initparse(query_buf, query_len, &handle) < 0) {
         perror("ns_initparse failed");
         return NULL;
@@ -142,99 +262,430 @@ char* query_dns_type_A(const char *domain, const char *dns_server) {
             return NULL;
         }
 
-        // Verifică tipul de înregistrare (A, CNAME, etc.)
+        //verifica tipul a
         if (ns_rr_type(rr) == ns_t_a) {
             struct in_addr ip_addr;
             memcpy(&ip_addr, ns_rr_rdata(rr), sizeof(ip_addr));
 
-            // Convertește adresa IP în formatul șirului de caractere
+            // converteste adresa IP
             if (inet_ntop(AF_INET, &ip_addr, ip_str, sizeof(ip_str)) != NULL) {
-                return ip_str; // Returnează prima adresă găsită
+                return ip_str;
             }
         }
     }
 
-    // Dacă nu s-a găsit nici o adresă
+    return NULL;
+}
+
+char* query_dns_type_AAAA(const char *domain, const char *dns_server) {
+    unsigned char query_buf[NS_PACKETSZ];
+    ns_msg handle;
+    ns_rr rr;
+    int query_len, i;
+    
+    struct sockaddr_in dest;
+    memset(&dest, 0, sizeof(dest));
+    dest.sin_family = AF_INET;
+    dest.sin_port = htons(53);
+    inet_pton(AF_INET, dns_server, &dest.sin_addr);
+
+    query_len = res_query(domain, ns_c_in, ns_t_aaaa, query_buf, sizeof(query_buf));
+    if (query_len < 0) {
+        perror("res_query failed");
+        return NULL;
+    }
+
+    if (ns_initparse(query_buf, query_len, &handle) < 0) {
+        perror("ns_initparse failed");
+        return NULL;
+    }
+
+    for (i = 0; i < ns_msg_count(handle, ns_s_an); i++) {
+        if (ns_parserr(&handle, ns_s_an, i, &rr) < 0) {
+            perror("ns_parserr failed");
+            return NULL;
+        }
+
+        // verifica cerere aaaa
+        if (ns_rr_type(rr) == ns_t_aaaa) {
+            char *ip_addr = malloc(INET6_ADDRSTRLEN);
+            if (ip_addr == NULL) {
+                perror("malloc failed");
+                return NULL;
+            }
+
+            //converteste adresa ip
+            struct in6_addr *ipv6_addr = (struct in6_addr *)ns_rr_rdata(rr);
+            if (inet_ntop(AF_INET6, ipv6_addr, ip_addr, INET6_ADDRSTRLEN)) {
+                return ip_addr;
+            } else {
+                perror("inet_ntop failed");
+                free(ip_addr);
+            }
+        }
+    }
+
+    return NULL;
+}
+
+char** query_dns_txt(const char *domain, const char *dns_server) {
+    unsigned char query_buf[MAX_DNS_BUFFER];
+    ns_msg handle;
+    ns_rr rr;
+    int query_len, i;
+
+    struct __res_state res;
+    memset(&res, 0, sizeof(res));
+    if (res_ninit(&res) < 0) {
+        perror("res_ninit failed");
+        return NULL;
+    }
+
+    inet_pton(AF_INET, dns_server, &res.nsaddr_list[0].sin_addr);
+    res.nsaddr_list[0].sin_family = AF_INET;
+    res.nsaddr_list[0].sin_port = htons(53);
+    res.nscount = 1;
+
+    //raspunsuri mari
+    res.options |= RES_USE_EDNS0;
+
+    query_len = res_nquery(&res, domain, ns_c_in, ns_t_txt, query_buf, sizeof(query_buf));
+    if (query_len < 0) {
+        perror("res_nquery failed");
+        res_nclose(&res);
+        return NULL;
+    }
+
+    if (ns_initparse(query_buf, query_len, &handle) < 0) {
+        perror("ns_initparse failed");
+        res_nclose(&res);
+        return NULL;
+    }
+
+    for (i = 0; i < ns_msg_count(handle, ns_s_an); i++) {
+        if (ns_parserr(&handle, ns_s_an, i, &rr) < 0) {
+            perror("ns_parserr failed");
+            res_nclose(&res);
+            return NULL;
+        }
+
+        //verifica cerere txt
+        if (ns_rr_type(rr) == ns_t_txt) {
+            const unsigned char *txt_data = ns_rr_rdata(rr);
+            unsigned int txt_len = txt_data[0];
+
+            if (txt_len + 1 > ns_rr_rdlen(rr)) {
+                fprintf(stderr, "Invalid TXT record length\n");
+                res_nclose(&res);
+                return NULL;
+            }
+
+            char **result = (char **)malloc(sizeof(char *));
+            if (!result) {
+                fprintf(stderr, "Memory allocation failed\n");
+                res_nclose(&res);
+                return NULL;
+            }
+
+            *result = (char *)malloc(txt_len + 1);
+            if (!(*result)) {
+                fprintf(stderr, "Memory allocation failed\n");
+                free(result);
+                res_nclose(&res);
+                return NULL;
+            }
+
+            strncpy(*result, (const char *)&txt_data[1], txt_len);
+            (*result)[txt_len] = '\0';
+
+            res_nclose(&res);
+            return result;
+        }
+    }
+
+    fprintf(stderr, "No TXT records found\n");
+    res_nclose(&res);
     return NULL;
 }
 
 void parse_ipv4_address(char *adresa, uint8_t addr[4]) 
 {
     int octet;
-    const char *ptr = adresa; // Pointer la începutul string-ului
-    char temp[4]; // Buffer temporar pentru fiecare octet
+    const char *ptr = adresa;
+    char temp[4];
     int index = 0;
 
-    while (*ptr != '\0' && index < 4) {
+    while (*ptr != '\0' && index < 4) 
+    {
         int i = 0;
-        // Extrage caracterele până la '.'
-        while (*ptr != '.' && *ptr != '\0') {
+        while (*ptr != '.' && *ptr != '\0') 
+        {
             temp[i++] = *ptr;
             ptr++;
         }
-        temp[i] = '\0'; // Termină bufferul temporar cu NULL
+        temp[i] = '\0';
 
-        // Convertim partea curentă în număr și o punem în addr
+
         octet = atoi(temp);
-        if (octet < 0 || octet > 255) {
+        if (octet < 0 || octet > 255) 
+        {
             printf("Adresa IP invalidă!\n");
             return;
         }
         addr[index++] = (uint8_t)octet;
 
-        // Dacă am ajuns la '.', trecem peste el
-        if (*ptr == '.') {
+        if (*ptr == '.') 
+        {
             ptr++;
         }
     }
 
-    // Verificăm dacă am găsit toți cei 4 octeți
-    if (index != 4) {
+    if (index != 4) 
+    {
         printf("Adresa IP incompletă!\n");
     }
 }
 
-void parse_ipv6_address(const char *ipv6_str, uint8_t addr[16])
+void parse_ipv6_address(const char *ipv6_str, uint8_t addr[16]) 
 {
-    // Inițializăm array-ul cu zero
     memset(addr, 0, 16);
     
-    const char *ptr = ipv6_str;   // Pointer pentru a parcurge string-ul
-    char block[5] = {0};          // Fiecare grup hexa poate avea max 4 cifre + terminator '\0'
-    int block_index = 0;          // Index pentru grupuri
-    int addr_index = 0;           // Index în array-ul addr
+    const char *ptr = ipv6_str;  
+    char block[5] = {0};
+    int block_index = 0;
+    int addr_index = 0;
+    int double_colon = 0;
 
-    while (*ptr && addr_index < 16) {
-        // Resetăm blocul
+    while (*ptr && addr_index < 16) 
+    {
+        if (*ptr == ':' && *(ptr + 1) == ':')
+        {
+            if (double_colon) 
+            {
+                printf("Adresă invalidă: secvență :: duplicată!\n");
+                return;
+            }
+            double_colon = 1;
+            ptr += 2;
+            continue;
+        }
+
         memset(block, 0, 5);
+        block_index = 0;
 
-        // Construim un grup de maxim 4 caractere hexadecimale
-        int i = 0;
-        while (*ptr && *ptr != ':' && i < 4) {
-            block[i++] = *ptr;
+        while (*ptr && *ptr != ':' && block_index < 4) 
+        {
+            if (isxdigit(*ptr)) 
+            { 
+                block[block_index++] = *ptr;
+            }
             ptr++;
         }
 
-        // Convertim grupul într-un uint16_t
         uint16_t segment = (uint16_t)strtol(block, NULL, 16);
 
-        // Descompunem segmentul în 2 octeți
-        addr[addr_index++] = (segment >> 8) & 0xFF;  // Octetul superior
-        addr[addr_index++] = segment & 0xFF;         // Octetul inferior
+        addr[addr_index++] = (segment >> 8) & 0xFF;
+        addr[addr_index++] = segment & 0xFF;
 
-        // Dacă am ajuns la un separator ':', trecem la următorul grup
-        if (*ptr == ':') {
+        if (*ptr == ':') 
+        {
             ptr++;
+        }
+
+        if (double_colon && addr_index < 16) 
+        {
+            while (addr_index < 16) 
+            {
+                addr[addr_index++] = 0;
+            }
+            break;
         }
     }
 
-    if (addr_index != 16) {
-        printf("Adresa IP incompletă!\n");
+    printf("%d",addr_index);
+}
+
+bool get_A_record_subdomain(uint8_t addr[4], const char domain_name[], const char subdomain_name[])
+{
+    log_message("INFO", "Se cauta raspunsul in fiserele de zona...");
+    char zone_file[30] ="zone_files/";
+    strcat(zone_file,domain_name);
+    strcat(zone_file,".zone");
+
+    static char record_value[INET_ADDRSTRLEN]; 
+    char command[512];
+
+    snprintf(command,sizeof(command),"grep -w \"www  IN    A\" %s | rev | cut -f1 -d' ' | rev",zone_file);
+
+    FILE *fp = popen(command, "r");
+    if (!fp) {
+        perror("Nu s-a putut executa comanda");
+        return false;
     }
+
+    if (fgets(record_value, sizeof(record_value), fp)) 
+    {
+        record_value[strcspn(record_value, "\n")] = '\0';
+        pclose(fp);
+
+        log_message("INFO","Raspunsul a fost gasit in zona!");
+        log_message("INFO","Se adauga domeniul %s - \"%s\" in cache...",subdomain_name, "A");
+        add_to_cache(subdomain_name,record_value,"A");
+
+        parse_ipv4_address(record_value,addr);
+        return true;
+    }
+    else
+    {
+      log_message("ERROR","Raspunsul nu a fost gasit in fisierele de zona!");
+      log_message("INFO","Se cauta raspunsul in serverul Google...");
+      const char *dns_server = "8.8.8.8";  // google
+      char* ip=query_dns_type_A(subdomain_name, dns_server);
+      
+      if(ip == NULL)
+      {
+          log_message("ERROR","Adresa nu a fost gasita in serverul Google!");
+          return false;
+      }
+      else
+        {
+          log_message("INFO","Raspunsul a fost gasit in serverul Google!");
+          log_message("INFO","Se adauga domeniul %s - \"%s\" in cache...",subdomain_name, "A");
+          add_to_cache(subdomain_name,ip,"A");
+          parse_ipv4_address(ip,addr);
+          return true;
+        }
+    }
+
+    pclose(fp);
+    return false;
+}
+
+bool get_AAAA_record_subdomain(uint8_t addr[16], const char domain_name[], const char subdomain_name[])
+{
+  log_message("INFO", "Se cauta raspunsul in fiserele de zona...");
+    char zone_file[30] ="zone_files/";
+    strcat(zone_file,domain_name);
+    strcat(zone_file,".zone");
+
+    static char record_value[128]; 
+    char command[512];
+
+    snprintf(command,sizeof(command),"grep -w \"www  IN    AAAA\" %s | rev | cut -f1 -d' ' | rev",zone_file);
+
+    FILE *fp = popen(command, "r");
+    if (!fp) {
+        perror("Nu s-a putut executa comanda");
+        return false;
+    }
+
+    if (fgets(record_value, sizeof(record_value), fp)) 
+    {
+        printf("%s",record_value);
+        record_value[strcspn(record_value, "\n")] = '\0';
+        pclose(fp);
+
+        log_message("INFO","Raspunsul a fost gasit in zona!");
+        log_message("INFO","Se adauga domeniul %s - \"%s\" in cache...",subdomain_name, "AAAA");
+        add_to_cache(subdomain_name,record_value,"AAAA");
+
+        parse_ipv6_address(record_value,addr);
+        return true;
+    }
+    else
+    {
+      log_message("ERROR","Raspunsul nu a fost gasit in fisierele de zona!");
+      log_message("INFO","Se cauta raspunsul in serverul Google...");
+
+      const char *dns_server = "8.8.8.8";  // google
+      char* ip=query_dns_type_AAAA(subdomain_name, dns_server);
+
+      if(ip == NULL)
+      {
+          log_message("ERROR","Adresa nu a fost gasita in serverul Google!\n");
+          return false;
+      }
+      else
+        {
+          log_message("INFO","Raspunsul a fost gasit in serverul Google");
+          log_message("INFO","Se adauga domeniul %s - \"%s\" in cache...",subdomain_name, "AAAA");
+          add_to_cache(subdomain_name,ip,"AAAA");
+
+          parse_ipv6_address(ip, addr);
+          return true;
+        }
+    }
+
+    pclose(fp);
+    return false;
+}
+
+bool get_TXT_record_subdomain(char **addr, const char domain_name[], const char subdomain_name[])
+{
+  log_message("INFO", "Se cauta raspunsul in fiserele de zona...");
+    char zone_file[30] ="zone_files/";
+    strcat(zone_file,domain_name);
+    strcat(zone_file,".zone");
+
+    static char record_value[255]; 
+    char command[512];
+
+    snprintf(command,sizeof(command),"grep -w \"www  IN    TXT\" %s | rev | cut -f1 -d' ' | rev",zone_file);
+
+    FILE *fp = popen(command, "r");
+    if (!fp) {
+        perror("Nu s-a putut executa comanda");
+        return false;
+    }
+
+    if (fgets(record_value, sizeof(record_value), fp)) 
+    {
+        record_value[strcspn(record_value, "\n")] = '\0';
+        pclose(fp);
+
+        *addr = (char *)malloc(strlen(record_value) + 1);  // +1 pentru terminatorul de sir '\0'
+        if (*addr != NULL)
+        {
+          strcpy(*addr, record_value);
+
+          log_message("INFO","Raspunsul a fost gasit in zona");
+          log_message("INFO","Se adauga domeniul %s - \"%s\" in cache...",subdomain_name, "TXT");
+          add_to_cache(subdomain_name,record_value,"TXT");
+
+          return true;
+        }
+    }
+    else
+    {
+      log_message("ERROR","Raspunsul nu a fost gasit in fisierele de zona!");
+      log_message("INFO","Se cauta raspunsul in serverul Google...");
+
+      const char *dns_server = "8.8.8.8";
+      
+      char **txt_result = query_dns_txt(domain_name, dns_server);
+      if (!txt_result) 
+      {
+        log_message("ERROR", "Adresa nu a fost găsită în serverul Google!\n");
+        return false;
+      }
+
+      log_message("INFO","Raspunsul a fost gasit in serverul Google");
+      log_message("INFO","Se adauga domeniul %s - \"%s\" in cache...",subdomain_name, "TXT");
+      add_to_cache(subdomain_name,*txt_result,"TXT");
+
+
+      *addr = *txt_result;
+      free(txt_result);
+      return true;
+    }
+
+    pclose(fp);
+    return false;
 }
 
 bool get_A_Record(uint8_t addr[4], const char domain_name[])
 {
+    log_message("INFO", "Se cauta raspunsul in fiserele de zona...");
     char zone_file[30] ="zone_files/";
     strcat(zone_file,domain_name);
     strcat(zone_file,".zone");
@@ -255,18 +706,30 @@ bool get_A_Record(uint8_t addr[4], const char domain_name[])
         record_value[strcspn(record_value, "\n")] = '\0';
         pclose(fp);
 
+        log_message("INFO","Raspunsul a fost gasit in zona!");
+        log_message("INFO","Se adauga domeniul %s - \"%s\" in cache...",domain_name, "A");
+        add_to_cache(domain_name,record_value,"A");
+
         parse_ipv4_address(record_value,addr);
         return true;
     }
     else
     {
+      log_message("ERROR","Raspunsul nu a fost gasit in fisierele de zona!");
+      log_message("INFO","Se cauta raspunsul in serverul Google...");
       const char *dns_server = "8.8.8.8";  // google
       char* ip=query_dns_type_A(domain_name, dns_server);
       
       if(ip == NULL)
-        return false;
+      {
+          log_message("ERROR","Adresa nu a fost gasita in serverul Google!");
+          return false;
+      }
       else
         {
+          log_message("INFO","Raspunsul a fost gasit in serverul Google!");
+          log_message("INFO","Se adauga domeniul %s - \"%s\" in cache...",domain_name, "A");
+          add_to_cache(domain_name,ip,"A");
           parse_ipv4_address(ip,addr);
           return true;
         }
@@ -278,14 +741,15 @@ bool get_A_Record(uint8_t addr[4], const char domain_name[])
 
 bool get_AAAA_Record(uint8_t addr[16], const char domain_name[])
 {
-  char zone_file[30] ="zone_files/";
+    log_message("INFO", "Se cauta raspunsul in fiserele de zona...");
+    char zone_file[30] ="zone_files/";
     strcat(zone_file,domain_name);
     strcat(zone_file,".zone");
 
-    static char record_value[INET_ADDRSTRLEN]; 
+    static char record_value[128]; 
     char command[512];
 
-    snprintf(command,sizeof(command),"grep -w \"@    IN    AAAA\" %s | rev | cut -f1 -d' ' | rev",zone_file);
+    snprintf(command,sizeof(command),"grep -w \"^@    IN    AAAA\" %s | rev | cut -f1 -d' ' | rev",zone_file);
 
     FILE *fp = popen(command, "r");
     if (!fp) {
@@ -295,16 +759,39 @@ bool get_AAAA_Record(uint8_t addr[16], const char domain_name[])
 
     if (fgets(record_value, sizeof(record_value), fp)) 
     {
+        printf("%s",record_value);
         record_value[strcspn(record_value, "\n")] = '\0';
         pclose(fp);
+
+        log_message("INFO","Raspunsul a fost gasit in zona!");
+        log_message("INFO","Se adauga domeniul %s - \"%s\" in cache...",domain_name, "AAAA");
+        add_to_cache(domain_name,record_value,"AAAA");
 
         parse_ipv6_address(record_value,addr);
         return true;
     }
     else
     {
+      log_message("ERROR","Raspunsul nu a fost gasit in fisierele de zona!");
+      log_message("INFO","Se cauta raspunsul in serverul Google...");
+
       const char *dns_server = "8.8.8.8";  // google
-      //query_dns(domain_name, dns_server, ns_t_aaaa);
+      char* ip=query_dns_type_AAAA(domain_name, dns_server);
+
+      if(ip == NULL)
+      {
+          log_message("ERROR","Adresa nu a fost gasita in serverul Google!\n");
+          return false;
+      }
+      else
+        {
+          log_message("INFO","Raspunsul a fost gasit in serverul Google");
+          log_message("INFO","Se adauga domeniul %s - \"%s\" in cache...",domain_name, "AAAA");
+          add_to_cache(domain_name,ip,"AAAA");
+
+          parse_ipv6_address(ip, addr);
+          return true;
+        }
     }
 
     pclose(fp);
@@ -313,7 +800,8 @@ bool get_AAAA_Record(uint8_t addr[16], const char domain_name[])
 
 bool get_TXT_Record(char **addr, const char domain_name[])
 {
-  char zone_file[30] ="zone_files/";
+    log_message("INFO", "Se cauta raspunsul in fiserele de zona...");
+    char zone_file[30] ="zone_files/";
     strcat(zone_file,domain_name);
     strcat(zone_file,".zone");
 
@@ -337,20 +825,41 @@ bool get_TXT_Record(char **addr, const char domain_name[])
         if (*addr != NULL)
         {
           strcpy(*addr, record_value);
-          //printf("%s",record_value);
+
+          log_message("INFO","Raspunsul a fost gasit in zona");
+          log_message("INFO","Se adauga domeniul %s - \"%s\" in cache...",domain_name, "TXT");
+          add_to_cache(domain_name,record_value,"TXT");
+
           return true;
         }
     }
     else
     {
-      const char *dns_server = "8.8.8.8";  // google
-      //query_dns(domain_name, dns_server,ns_t_txt);
+      log_message("ERROR","Raspunsul nu a fost gasit in fisierele de zona!");
+      log_message("INFO","Se cauta raspunsul in serverul Google...");
+
+      const char *dns_server = "8.8.8.8";
+      
+      char **txt_result = query_dns_txt(domain_name, dns_server);
+      if (!txt_result) 
+      {
+        log_message("ERROR", "Adresa nu a fost găsită în serverul Google!\n");
+        return false;
+      }
+
+      log_message("INFO","Raspunsul a fost gasit in serverul Google");
+      log_message("INFO","Se adauga domeniul %s - \"%s\" in cache...",domain_name, "TXT");
+      add_to_cache(domain_name,*txt_result,"TXT");
+
+
+      *addr = *txt_result;
+      free(txt_result);
+      return true;
     }
 
     pclose(fp);
     return false;
 }
-
 
 void print_hex(uint8_t *buf, size_t len)
 {
@@ -377,6 +886,7 @@ void print_resource_record(struct Record *rr)
     switch (rr->type) {
       case A_Resource_RecordType:
         printf("Address Resource Record { address ");
+        log_message("INFO", "Adresa gasita: %d.%d.%d.%d \n",rd->a_record.addr[0],rd->a_record.addr[1],rd->a_record.addr[2],rd->a_record.addr[3]);
 
         for (i = 0; i < 4; i += 1){
           printf("%s%u", (i ? "." : ""), rd->a_record.addr[i]);
@@ -386,9 +896,27 @@ void print_resource_record(struct Record *rr)
         break;
       case AAAA_Resource_RecordType:
         printf("AAAA Resource Record { address ");
+        log_message("INFO","Adresa gasita: %02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x\n",
+        rd->aaaa_record.addr[0],
+        rd->aaaa_record.addr[1],
+        rd->aaaa_record.addr[2],
+        rd->aaaa_record.addr[3],
+        rd->aaaa_record.addr[4],
+        rd->aaaa_record.addr[5],
+        rd->aaaa_record.addr[6],
+        rd->aaaa_record.addr[7],
+        rd->aaaa_record.addr[8],
+        rd->aaaa_record.addr[9],
+        rd->aaaa_record.addr[10],
+        rd->aaaa_record.addr[11],
+        rd->aaaa_record.addr[12],
+        rd->aaaa_record.addr[13],
+        rd->aaaa_record.addr[14],
+        rd->aaaa_record.addr[15]);
 
         for (i = 0; i < 16; i += 1)
           printf("%s%02x", (i ? ":" : ""), rd->aaaa_record.addr[i]);
+          
 
         printf(" }");
         break;
@@ -396,9 +924,11 @@ void print_resource_record(struct Record *rr)
         printf("Text Resource Record { txt_data '%s' }",
           rd->txt_record.txt_data
         );
+        log_message("INFO","Adresa gasita: '%s'\n", rd->txt_record.txt_data);
         break;
       default:
         printf("Unknown Resource Record { ??? }");
+        log_message("ERROR","Tip de cerere necunoscut: ???? ");
     }
     printf("}\n");
     rr = rr->next;
@@ -434,7 +964,6 @@ void print_message(struct dns_Message *msg)
 
   printf("}\n");
 }
-
 
 size_t get16bits(const uint8_t **buffer)
 {
@@ -523,7 +1052,6 @@ void encode_domain_name(uint8_t **buffer, const char *domain)
   *buffer += i;
 }
 
-
 void decode_header(struct dns_Message *msg, const uint8_t **buffer)
 {
   msg->header.id= get16bits(buffer);
@@ -595,91 +1123,260 @@ bool decode_msg(struct dns_Message *msg, const uint8_t *buffer, size_t size)
   return true;
 }
 
-
-void resolve_query(struct dns_Message *msg)
+bool is_subdomain(const char *domain)
 {
-  struct Record *beg;
-  struct Record *rr;
-  struct Question *q;
-
-  // leave most values intact for response
-  msg->header.flags.qr = 1; // this is a response
-  msg->header.flags.aa = 1; // this server is authoritative
-  msg->header.flags.ra = 0; // no recursion available
-  msg->header.flags.rCode= R_CODE_NO_ERROR;
-
-  // should already be 0
-  msg->header.ancount = 0;
-  msg->header.nscount = 0;
-  msg->header.arcount = 0;
-
-  q = msg->questions;
-  while (q) {
-    rr = calloc(1, sizeof(struct Record));
-
-    rr->name = strdup(q->qname);
-    rr->type = q->qtype;
-    rr->Aclass = q->qclass;
-    rr->ttl = 60*60; // in seconds; 0 means no caching
-
-    printf("Query for '%s'\n", q->qname);
-
-    switch (q->qtype) {
-      case A_Resource_RecordType:
-        rr->data_len = 4;
-        if(!get_A_Record(rr->rd_data.a_record.addr, q->qname)){
-          free(rr->name);
-          free(rr);
-          goto next;
-          }
-        break;
-      case AAAA_Resource_RecordType:
-        rr->data_len = 16;
-        if (!get_AAAA_Record(rr->rd_data.aaaa_record.addr, q->qname)) {
-          free(rr->name);
-          free(rr);
-          goto next;
+    int count = 0;
+    while (*domain) {
+        if (*domain == '.') {
+            count++;
         }
-        break;
-      case TXT_Resource_RecordType:
-        if (!get_TXT_Record(&(rr->rd_data.txt_record.txt_data), q->qname)) {
-          free(rr->name);
-          free(rr);
-          goto next;
-        }
-        int txt_data_len = strlen(rr->rd_data.txt_record.txt_data);
-        rr->data_len = txt_data_len + 1;
-        rr->rd_data.txt_record.txt_data_len = txt_data_len;
-        break;
-      /*
-      case NS_Resource_RecordType:
-      case CNAME_Resource_RecordType:
-      case SOA_Resource_RecordType:
-      case PTR_Resource_RecordType:
-      case MX_Resource_RecordType:
-      case TXT_Resource_RecordType:
-      */
-      default:
-        free(rr->name);
-        free(rr);
-        msg->header.flags.rCode = R_CODE_NOT_IMPLEMENTED;
-        printf("Cannot answer question of type %d.\n", q->qtype);
-        goto next;
+        domain++;
     }
+    if(count==1)
+        return false;
+    else
+        return true;
+}
 
-    msg->header.ancount++;
+void extract_main_domain(const char *subdomain, char *main_domain)
+{
+    const char *last_dot = strchr(subdomain, '.');
+    if (last_dot != NULL) 
+    {
+        strcpy(main_domain, last_dot + 1);
+    }
+}
 
-    // prepend resource record to answers list
-    beg = msg->answers;
-    msg->answers = rr;
-    rr->next = beg;
+void resolve_query(struct dns_Message *msg) {
+    struct Record *beg;
+    struct Record *rr;
+    struct Question *q;
 
-    // jump here to omit question
-    next:
+    //valorile pentru răspuns
+    msg->header.flags.qr = 1;  //este un răspuns
+    msg->header.flags.aa = 1;  //server autoritar
+    msg->header.flags.ra = 0;  //fara recursivitate
+    msg->header.flags.rCode = R_CODE_NO_ERROR;
 
-    // process next question
-    q = q->next;
-  }
+    //initializare campuri raspuns
+    msg->header.ancount = 0;
+    msg->header.nscount = 0;
+    msg->header.arcount = 0;
+
+    q = msg->questions;
+    while (q) {
+        rr = calloc(1, sizeof(struct Record));
+        rr->name = strdup(q->qname);
+        rr->type = q->qtype;
+        rr->Aclass = q->qclass;
+        rr->ttl = 60 * 60;
+
+        printf("Query for '%s'\n", q->qname);
+
+      if (is_subdomain(q->qname))
+      {
+        log_message("INFO", "Cererea %s este un subdomeniu", q->qname);
+        log_message("INFO", "Se cauta adresa IP pentru subdomeniul: %s", q->qname);
+
+        
+        if (q->qtype == A_Resource_RecordType)
+        {
+            rr->data_len = 4;
+
+            // Caută în cache
+            log_message("INFO", "Se cauta raspunsul in cache...");
+            char *cached_value_a = search_cache(q->qname, "A");
+            if (cached_value_a) {
+                log_message("INFO", "Raspuns gasit in cache pentru subdomeniul %s", q->qname);
+                inet_pton(AF_INET, cached_value_a, rr->rd_data.a_record.addr);
+                msg->header.ancount++;
+                beg = msg->answers;
+                msg->answers = rr;
+                rr->next = beg;
+                goto next;
+            }
+            else {
+              log_message("ERROR", "Raspunsul nu a fost gasit in cache!");
+            }
+
+            // Caută în fișierul de zonă
+            char main_domain[256];
+            extract_main_domain(q->qname, main_domain);
+            log_message("INFO", "Domeniul principal este %s", main_domain);
+
+            if (!get_A_record_subdomain(rr->rd_data.a_record.addr,main_domain, q->qname)) {
+                log_message("ERROR", "Nu s-a găsit înregistrarea A pentru subdomeniu");
+                free(rr->name);
+                free(rr);
+                goto next;
+            }
+
+        } else if (q->qtype == AAAA_Resource_RecordType)
+          {
+            rr->data_len = 16;
+
+            // Caută în cache
+            log_message("INFO", "Se caută raspunsul in cache");
+            char *cached_value_aaaa = search_cache(q->qname, "AAAA");
+            if (cached_value_aaaa)
+            {
+                log_message("INFO", "Raspuns gasit in cache pentru subdomeniul %s", q->qname);
+                inet_pton(AF_INET6, cached_value_aaaa, rr->rd_data.aaaa_record.addr);
+                msg->header.ancount++;
+                beg = msg->answers;
+                msg->answers = rr;
+                rr->next = beg;
+                goto next;
+            }
+
+            // Caută în fișierul de zonă
+            char main_domain[256];
+            extract_main_domain(q->qname, main_domain);
+            log_message("INFO", "Domeniul principal este %s", main_domain);
+
+            if (!get_AAAA_record_subdomain(rr->rd_data.aaaa_record.addr,main_domain,q->qname)) {
+                log_message("ERROR", "Nu s-a găsit înregistrarea AAAA pentru subdomeniu");
+                free(rr->name);
+                free(rr);
+                goto next;
+            }
+
+        } else if (q->qtype == TXT_Resource_RecordType)
+        {
+            log_message("INFO", "Se caută raspunsul in cache");
+
+            // Caută în cache
+            char *cached_value_txt = search_cache(q->qname, "TXT");
+            if (cached_value_txt)
+            {
+                log_message("INFO", "Răspuns găsit în cache pentru subdomeniul: %s", q->qname);
+                rr->data_len = strlen(cached_value_txt) + 1;
+                rr->rd_data.txt_record.txt_data = strdup(cached_value_txt);
+                rr->rd_data.txt_record.txt_data_len = strlen(cached_value_txt);
+                msg->header.ancount++;
+                beg = msg->answers;
+                msg->answers = rr;
+                rr->next = beg;
+                goto next;
+            }
+
+            // Caută în fișierul de zonă
+            char main_domain[256];
+            extract_main_domain(q->qname, main_domain);
+            log_message("INFO", "Domeniul principal este %s", main_domain);
+
+            if (!get_TXT_record_subdomain(&(rr->rd_data.txt_record.txt_data), main_domain, q->qname))
+            {
+                log_message("ERROR", "Nu s-a găsit înregistrarea TXT pentru subdomeniu");
+                free(rr->name);
+                free(rr);
+                goto next;
+            }
+
+        } else {
+            log_message("ERROR", "Tipul de cerere nu este suportat pentru subdomenii.");
+            free(rr->name);
+            free(rr);
+            msg->header.flags.rCode = R_CODE_NOT_IMPLEMENTED;
+            return;
+        }
+
+    } else 
+        {
+            //domeniul principal
+            log_message("INFO", "Se cauta adresa IP pentru domeniul: %s", q->qname);
+
+            // cauta in cache
+            log_message("INFO", "Se cauta raspunsul in cache...");
+            switch (q->qtype) {
+                case A_Resource_RecordType:
+                    rr->data_len = 4;
+                    // cache pentru A
+                    char *cached_value_a = search_cache(q->qname, "A");
+                    if (cached_value_a) {
+                        log_message("INFO", "Raspuns gasit in cache pentru domeniul %s", q->qname);
+                        inet_pton(AF_INET, cached_value_a, rr->rd_data.a_record.addr);
+                        msg->header.ancount++;
+                        beg = msg->answers;
+                        msg->answers = rr;
+                        rr->next = beg;
+                        goto next;
+                    } else {
+                        log_message("ERROR", "Raspunsul nu a fost gasit in cache!");
+                    }
+                    //zona pentru A
+                    if (!get_A_Record(rr->rd_data.a_record.addr, q->qname)) {
+                        free(rr->name);
+                        free(rr);
+                        goto next;
+                    }
+                    break;
+                case AAAA_Resource_RecordType:
+                    rr->data_len = 16;
+                    //cache pentru AAAA
+                    char *cached_value_aaaa = search_cache(q->qname, "AAAA");
+                    if (cached_value_aaaa) {
+                        log_message("INFO", "Raspuns gasit in cache pentru domeniul %s", q->qname);
+                        inet_pton(AF_INET6, cached_value_aaaa, rr->rd_data.aaaa_record.addr);
+                        msg->header.ancount++;
+                        beg = msg->answers;
+                        msg->answers = rr;
+                        rr->next = beg;
+                        goto next;
+                    } else {
+                        log_message("ERROR", "Raspunsul nu a fost gasit in cache!");
+                    }
+                    //zona pentru AAAA
+                    if (!get_AAAA_Record(rr->rd_data.aaaa_record.addr, q->qname)) {
+                        free(rr->name);
+                        free(rr);
+                        goto next;
+                    }
+                    break;
+                case TXT_Resource_RecordType:
+                    // cache pentru TXT
+                    char *cached_value_txt = search_cache(q->qname, "TXT");
+                    if (cached_value_txt) {
+                        log_message("INFO", "Raspuns gasit in cache pentru domeniul %s", q->qname);
+                        rr->data_len = strlen(cached_value_txt) + 1;
+                        rr->rd_data.txt_record.txt_data = strdup(cached_value_txt);
+                        rr->rd_data.txt_record.txt_data_len = strlen(cached_value_txt);
+                        msg->header.ancount++;
+                        beg = msg->answers;
+                        msg->answers = rr;
+                        rr->next = beg;
+                        goto next;
+                    } else {
+                        log_message("ERROR", "Raspunsul nu a fost gasit in cache!");
+                    }
+                    //zona pentru TXT
+                    if (!get_TXT_Record(&(rr->rd_data.txt_record.txt_data), q->qname)) {
+                        free(rr->name);
+                        free(rr);
+                        goto next;
+                    }
+                    int txt_data_len = strlen(rr->rd_data.txt_record.txt_data);
+                    rr->data_len = txt_data_len + 1;
+                    rr->rd_data.txt_record.txt_data_len = txt_data_len;
+                    break;
+                default:
+                    free(rr->name);
+                    free(rr);
+                    msg->header.flags.rCode = R_CODE_NOT_IMPLEMENTED;
+                    printf("Cannot answer question of type %d.\n", q->qtype);
+                    log_message("ERROR", "Nu se poate răspunde la tipul de cerere %d", q->qtype);
+                    goto next;
+            }
+        }
+
+        msg->header.ancount++;
+        beg = msg->answers;
+        msg->answers = rr;
+        rr->next = beg;
+
+        next:
+        q = q->next;  //urmatoarea intrebare
+    }
 }
 
 /* @return false upon failure, true upon success */
@@ -793,6 +1490,8 @@ void handle_connection(Received * recv)
     {
       return;
     }
+
+    log_message("INFO", "Cererea '%02x' a fost procesta!", msg.header.id);
   
     print_message(&msg);
   
@@ -800,6 +1499,8 @@ void handle_connection(Received * recv)
   
     print_message(&msg);
 
+
+    print_cache();
 
     uint8_t *p = recv->buffer;
     if (!encode_msg(&msg, &p)) 
@@ -843,12 +1544,12 @@ int main()
 {
   init_logging("aplicatie.log");
 
-  log_message("INFO", "Aplicația a început");
+  log_message("INFO", "Serverul este deschis!");
+
 
   pthread_t thread_pool[THREAD_NUM];
   pthread_mutex_init(&mutexQueue,NULL);
   pthread_cond_init(&condQueue,NULL);
-
 
   // buffer for input/output binary packet
   uint8_t buffer[BUFFER_SIZE];
@@ -861,7 +1562,6 @@ int main()
   int port = 8080;
 
   
-
   addr.sin_family = AF_INET;
   addr.sin_addr.s_addr = INADDR_ANY;
   addr.sin_port = htons(port);
@@ -872,16 +1572,19 @@ int main()
 
   if (rc != 0) {
     printf("Could not bind: %s\n", strerror(errno));
+    log_message("ERROR","Could not bind: %s",strerror(errno));
     return 1;
   }
 
   printf("Listening on port %u.\n", port);
+  log_message("INFO","Listening on port %u\n",port);
 
   for(int i=0;i<THREAD_NUM;i++)
   {
     if(pthread_create(&thread_pool[i],NULL,&thread_function,NULL)!=0)
     {
       perror("Failed to create the thread");
+      log_message("ERROR","Failed to create the thread");
     }
   }
 
@@ -903,6 +1606,7 @@ int main()
   pthread_mutex_destroy(&mutexQueue);
   pthread_cond_destroy(&condQueue);
 
+  log_message("INFO","Serverul este inchis!");
   close_logging();
 
   return 0;
