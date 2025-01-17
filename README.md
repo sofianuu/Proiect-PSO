@@ -1,25 +1,24 @@
 # Proiect-PSO
-1. Configurarea fisierelor de zona:
-- Fisierul de zona cuprinde domeniul principal si doua subdomenii.
-- Serverul este configurat sa raspunda la cererile A, AAAA si TXT pentru domeniul principal si la cererea A pentru subdomeniul "www".
+1. Configurarea fișierelor de zonă:
+- Fișierul de zonă cuprinde domeniul principal și un subdomeniu (www).
+- Serverul este configurat să răspundă la cererile A, AAAA și TXT pentru domeniul principal și la cererea A pentru subdomeniul "www".
 
 2. Configurarea TTL:
-- Fiecare domeniu care este adaugat in cache are setat un ttl de 300 de secunde.
-- Compararea se va face scazand din timpul curent, timpul de cand a fost adaugat in cache.
-- In functie de rezultat, domeniul va fi pastrat sau sters din cache.
+- Fiecare domeniu care este adăugat în cache are setat un ttl de 300 de secunde.
+- Compararea se va face scăzând din timpul curent, timpul de când a fost adăugat în cache.
+- În funcție de rezultat, domeniul va fi păstrat sau șters din cache.
 
-3. Subdomenii si forward DNS:
-- Cererile vor fi cautate intai in cache.
-- Daca nu sunt gasite in cache, vor fi cautate in fisierele de zona.
-- Daca sunt gasite in fisierele de zona, vor fi adaugate in cache.
-- Daca nu sunt gasite in fisierele de zona, cautarea se va face intr-un server superior (8.8.8.8).
-- Daca sunt gasite in serverul superior, vor fi adaugate in cache.
-- Daca nu sunt gasite in serverul superior, sa fa transmite pachetul gol.
+3. Subdomenii și forward DNS:
+- Cererile vor fi căutate întâi în fișierele de zonă.
+- Daca nu sunt găsite în zonă, vor fi căutate în cache.
+- Daca nu sunt găsite în cache, cautarea se va face într-un server superior (8.8.8.8).
+- Daca sunt găsite în serverul superior, vor fi adăugate în cache.
+- Daca nu sunt găsite în serverul superior, sa va transmite pachetul gol.
 
 4. Cache DNS:
-- Cache-ul este configurat printr-o lista de tipul DNSCacheEntry.
-- Aceasta structura contine numele de domeniu, tipul cererii, valoarea, timpul cand a fost adaugata inregistrarea si ttl-ul.
-- Am adaugat si functia print_cache() care scrie intr-un fisier lista de inregistrari din cache.
+- Cache-ul este configurat printr-o listă de tipul DNSCacheEntry.
+- Această structură conține numele de domeniu, tipul cererii, valoarea, timpul când a fost adăugată înregistrarea și ttl-ul.
+- Am adăugat și funcția print_cache() care scrie într-un fișier lista de înregistrări din cache.
 
-5. Functionalitate de logging:
-- Este o functie care scrie intr-un fisier si tine cont de urmatoarele lucruri: timpul la care se scrie in fisier, tipul mesajului ("INFO", "ERROR") si mesajul propriu-zis.
+5. Funcționalitate de logging:
+- Este o funcție care scrie într-un fișier și ține cont de următoarele lucruri: timpul la care se scrie în fișier, tipul mesajului ("INFO", "ERROR") și mesajul propriu-zis.
