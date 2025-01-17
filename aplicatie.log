@@ -1,75 +1,79 @@
-[2024-12-22 18:01:29] INFO: Serverul este deschis!
-[2024-12-22 18:01:29] INFO: Listening on port 8080
+[2025-01-17 16:51:58] INFO: Serverul este deschis!
+[2025-01-17 16:51:58] INFO: Listening on port 8080
 
-[2024-12-22 18:01:35] INFO: Cererea 'd97a' a fost procesta!
-[2024-12-22 18:01:35] INFO: Se cauta adresa IP pentru domeniul: altex.ro
-[2024-12-22 18:01:35] INFO: Se cauta raspunsul in cache...
-[2024-12-22 18:01:35] ERROR: Raspunsul nu a fost gasit in cache!
-[2024-12-22 18:01:35] INFO: Se cauta raspunsul in fiserele de zona...
-[2024-12-22 18:01:35] INFO: Raspunsul a fost gasit in zona!
-[2024-12-22 18:01:35] INFO: Se adauga domeniul altex.ro - "A" in cache...
-[2024-12-22 18:01:35] INFO: Adresa gasita: 183.94.232.93 
+[2025-01-17 16:52:03] INFO: Cererea '7730' a fost procesata!
+[2025-01-17 16:52:03] INFO: Cererea www.zara.com '7730' este un subdomeniu
+[2025-01-17 16:52:03] INFO: Se cauta adresa IP pentru subdomeniul: www.zara.com, cererea '7730'
+[2025-01-17 16:52:03] INFO: Domeniul principal este zara.com
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul pentru cererea '7730' in fiserele de zona...
+[2025-01-17 16:52:03] INFO: Cererea 'fabe' a fost procesata!
+[2025-01-17 16:52:03] INFO: Se cauta adresa IP pentru domeniul: altex.ro, cererea 'fabe'
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul pentru cererea 'fabe' in zone...
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul pentru cererea 'fabe' in fiserele de zona...
+[2025-01-17 16:52:03] INFO: Cererea 'd9f2' a fost procesata!
+[2025-01-17 16:52:03] INFO: Se cauta adresa IP pentru domeniul: mta.ro, cererea 'd9f2'
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul pentru cererea 'd9f2' in zone...
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul pentru cererea 'd9f2' in fiserele de zona...
+[2025-01-17 16:52:03] INFO: Cererea '8951' a fost procesata!
+[2025-01-17 16:52:03] INFO: Se cauta adresa IP pentru domeniul: facebook.com, cererea '8951'
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul pentru cererea '8951' in zone...
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul pentru cererea '8951' in fiserele de zona...
+[2025-01-17 16:52:03] INFO: Cererea '7d42' a fost procesata!
+[2025-01-17 16:52:03] INFO: Se cauta adresa IP pentru domeniul: facebook.com, cererea '7d42'
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul pentru cererea '7d42' in zone...
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul pentru cererea '7d42' in fiserele de zona...
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul in cache pentru cererea 'd9f2'...
+[2025-01-17 16:52:03] ERROR: Raspunsul pentru cererea 'd9f2' nu a fost gasit in cache!
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul pentru cererea 'd9f2' in serverul Google...
+[2025-01-17 16:52:03] INFO: Raspunsul pentru cererea '00' a fost gasit in serverul Google!
+[2025-01-17 16:52:03] INFO: Raspunsul pentru cererea '7730' a fost gasit in zona!
+[2025-01-17 16:52:03] INFO: Raspunsul pentru cererea '8951' a fost gasit in zona!
+[2025-01-17 16:52:03] INFO: Adresa gasita pentru cererea '7730' : 65.119.217.16 
 
-[2024-12-22 18:01:50] INFO: Cererea '7ae9' a fost procesta!
-[2024-12-22 18:01:50] INFO: Cererea www.altex.ro este un subdomeniu
-[2024-12-22 18:01:50] INFO: Se cauta adresa IP pentru subdomeniul: www.altex.ro
-[2024-12-22 18:01:50] INFO: Se cauta raspunsul in cache...
-[2024-12-22 18:01:50] ERROR: Raspunsul nu a fost gasit in cache!
-[2024-12-22 18:01:50] INFO: Domeniul principal este altex.ro
-[2024-12-22 18:01:50] INFO: Se cauta raspunsul in fiserele de zona...
-[2024-12-22 18:01:50] INFO: Raspunsul a fost gasit in zona!
-[2024-12-22 18:01:50] INFO: Se adauga domeniul www.altex.ro - "A" in cache...
-[2024-12-22 18:01:50] INFO: Adresa gasita: 126.255.30.228 
+[2025-01-17 16:52:03] INFO: Adresa gasita pentru cererea '8951' : 199.172.18.128 
 
-[2024-12-22 18:02:08] INFO: Cererea '9699' a fost procesta!
-[2024-12-22 18:02:08] INFO: Cererea www.altex.ro este un subdomeniu
-[2024-12-22 18:02:08] INFO: Se cauta adresa IP pentru subdomeniul: www.altex.ro
-[2024-12-22 18:02:08] INFO: Se caută raspunsul in cache
-[2024-12-22 18:02:08] INFO: Domeniul principal este altex.ro
-[2024-12-22 18:02:08] INFO: Se cauta raspunsul in fiserele de zona...
-[2024-12-22 18:02:08] ERROR: Raspunsul nu a fost gasit in fisierele de zona!
-[2024-12-22 18:02:08] INFO: Se cauta raspunsul in serverul Google...
-[2024-12-22 18:02:08] INFO: Raspunsul a fost gasit in serverul Google
-[2024-12-22 18:02:08] INFO: Se adauga domeniul www.altex.ro - "TXT" in cache...
-[2024-12-22 18:02:08] INFO: Adresa gasita: 'google-site-verification=1RurS6EquQqEUfJZKrMEzdv6gMJPyr2NZtZWcnQoqc8'
+[2025-01-17 16:52:03] INFO: Se adauga domeniul mta.ro - "A" in cache...
+[2025-01-17 16:52:03] INFO: Adresa gasita pentru cererea 'd9f2' : 192.124.249.79 
 
-[2024-12-22 18:03:24] INFO: Cererea 'f42d' a fost procesta!
-[2024-12-22 18:03:24] INFO: Se cauta adresa IP pentru domeniul: altex.ro
-[2024-12-22 18:03:24] INFO: Se cauta raspunsul in cache...
-[2024-12-22 18:03:24] ERROR: Raspunsul nu a fost gasit in cache!
-[2024-12-22 18:03:24] INFO: Se cauta raspunsul in fiserele de zona...
-[2024-12-22 18:03:24] INFO: Raspunsul a fost gasit in zona!
-[2024-12-22 18:03:24] INFO: Se adauga domeniul altex.ro - "AAAA" in cache...
-[2024-12-22 18:03:24] INFO: Adresa gasita: a654:b558:7ae6:f0b6:8a9a:7893:416e:ef5b
+[2025-01-17 16:52:03] INFO: Cererea '8615' a fost procesata!
+[2025-01-17 16:52:03] INFO: Se cauta adresa IP pentru domeniul: olx.com, cererea '8615'
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul pentru cererea '8615' in zone...
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul pentru cererea '8615' in fiserele de zona...
+[2025-01-17 16:52:03] INFO: Raspunsul pentru cererea 'fabe' a fost gasit in zona!
+[2025-01-17 16:52:03] INFO: Adresa gasita pentru cererea 'fabe' : 183.94.232.93 
 
-[2024-12-22 18:03:45] INFO: Cererea 'e92e' a fost procesta!
-[2024-12-22 18:03:45] INFO: Se cauta adresa IP pentru domeniul: altex.ro
-[2024-12-22 18:03:45] INFO: Se cauta raspunsul in cache...
-[2024-12-22 18:03:45] ERROR: Raspunsul nu a fost gasit in cache!
-[2024-12-22 18:03:45] INFO: Se cauta raspunsul in fiserele de zona...
-[2024-12-22 18:03:45] INFO: Raspunsul a fost gasit in zona
-[2024-12-22 18:03:45] INFO: Se adauga domeniul altex.ro - "TXT" in cache...
-[2024-12-22 18:03:45] INFO: Adresa gasita: '9zh3BPSXdeTD2PdvdENDOWGU9LAtw6g2TOeY5V2BmXZZidUnwJ'
+[2025-01-17 16:52:03] INFO: Cererea 'ce3c' a fost procesata!
+[2025-01-17 16:52:03] INFO: Se cauta adresa IP pentru domeniul: mta.ro, cererea 'ce3c'
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul pentru cererea 'ce3c' in zone...
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul pentru cererea 'ce3c' in fiserele de zona...
+[2025-01-17 16:52:03] INFO: Cererea '6cbc' a fost procesata!
+[2025-01-17 16:52:03] INFO: Se cauta adresa IP pentru domeniul: instagram.com, cererea '6cbc'
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul pentru cererea '6cbc' in zone...
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul pentru cererea '6cbc' in fiserele de zona...
+[2025-01-17 16:52:03] INFO: Cererea 'ad7a' a fost procesata!
+[2025-01-17 16:52:03] INFO: Se cauta adresa IP pentru domeniul: elefant.ro, cererea 'ad7a'
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul pentru cererea 'ad7a' in zone...
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul pentru cererea 'ad7a' in fiserele de zona...
+[2025-01-17 16:52:03] INFO: Raspunsul pentru cererea '7d42' a fost gasit in zona!
+[2025-01-17 16:52:03] INFO: Adresa gasita pentru cererea '7d42' : 199.172.18.128 
 
-[2024-12-22 18:04:06] INFO: Cererea '6926' a fost procesta!
-[2024-12-22 18:04:06] INFO: Cererea www.altex.ro este un subdomeniu
-[2024-12-22 18:04:06] INFO: Se cauta adresa IP pentru subdomeniul: www.altex.ro
-[2024-12-22 18:04:06] INFO: Se caută raspunsul in cache
-[2024-12-22 18:04:06] INFO: Răspuns găsit în cache pentru subdomeniul: www.altex.ro
-[2024-12-22 18:04:06] INFO: Adresa gasita: 'google-site-verification=1RurS6EquQqEUfJZKrMEzdv6gMJPyr2NZtZWcnQoqc8'
+[2025-01-17 16:52:03] INFO: Cererea '5bd6' a fost procesata!
+[2025-01-17 16:52:03] INFO: Se cauta adresa IP pentru domeniul: instagram.com, cererea '5bd6'
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul pentru cererea '5bd6' in zone...
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul pentru cererea '5bd6' in fiserele de zona...
+[2025-01-17 16:52:03] INFO: Raspunsul pentru cererea '8615' a fost gasit in zona!
+[2025-01-17 16:52:03] INFO: Adresa gasita pentru cererea '8615' : 187.165.131.199 
 
-[2024-12-22 18:08:35] INFO: Cererea '3602' a fost procesta!
-[2024-12-22 18:08:35] INFO: Cererea www.altex.ro este un subdomeniu
-[2024-12-22 18:08:35] INFO: Se cauta adresa IP pentru subdomeniul: www.altex.ro
-[2024-12-22 18:08:35] INFO: Se cauta raspunsul in cache...
-[2024-12-22 18:08:35] INFO: Inregistrarea altex.ro - AAAA a expirat si va fi stearsa din cache!
-[2024-12-22 18:08:35] INFO: Inregistrarea www.altex.ro - TXT a expirat si va fi stearsa din cache!
-[2024-12-22 18:08:35] INFO: Inregistrarea www.altex.ro - A a expirat si va fi stearsa din cache!
-[2024-12-22 18:08:35] INFO: Inregistrarea altex.ro - A a expirat si va fi stearsa din cache!
-[2024-12-22 18:08:35] ERROR: Raspunsul nu a fost gasit in cache!
-[2024-12-22 18:08:35] INFO: Domeniul principal este altex.ro
-[2024-12-22 18:08:35] INFO: Se cauta raspunsul in fiserele de zona...
-[2024-12-22 18:08:35] INFO: Raspunsul a fost gasit in zona!
-[2024-12-22 18:08:35] INFO: Se adauga domeniul www.altex.ro - "A" in cache...
-[2024-12-22 18:08:35] INFO: Adresa gasita: 126.255.30.228 
+[2025-01-17 16:52:03] INFO: Se cauta raspunsul in cache pentru cererea 'ce3c'...
+[2025-01-17 16:52:03] INFO: Raspuns gasit in cache pentru domeniul mta.ro, cererea 'ce3c'
+[2025-01-17 16:52:03] INFO: Adresa gasita pentru cererea 'ce3c' : 192.124.249.79 
+
+[2025-01-17 16:52:03] INFO: Raspunsul pentru cererea '6cbc' a fost gasit in zona!
+[2025-01-17 16:52:03] INFO: Adresa gasita pentru cererea '6cbc' : 192.168.25.129 
+
+[2025-01-17 16:52:03] INFO: Raspunsul pentru cererea 'ad7a' a fost gasit in zona!
+[2025-01-17 16:52:03] INFO: Adresa gasita pentru cererea 'ad7a' : 251.144.147.137 
+
+[2025-01-17 16:52:03] INFO: Raspunsul pentru cererea '5bd6' a fost gasit in zona!
+[2025-01-17 16:52:03] INFO: Adresa gasita pentru cererea '5bd6' : 251.144.147.137 
 
